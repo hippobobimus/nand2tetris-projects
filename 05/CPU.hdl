@@ -25,6 +25,14 @@
  * than to the address resulting from executing the current instruction. 
  */
 
+// Instruction format
+// A-instruction:
+// 0vvv vvvv vvvv vvvv (where v is a 15 bit constant).
+//
+// C-instruction:
+// 1  1  1  a    c1  c2  c3  c4    c5  c6  d1  d2    d3  j1  j2  j3
+// 15 14 13 12   11  10  9   8     7   6   5   4     3   2   1   0
+
 CHIP CPU {
 
     IN  inM[16],         // M value input  (M = contents of RAM[A])
@@ -39,5 +47,45 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    // A register
+    Mux16(a=instruction, b=ALUOut, sel=instruction[15], out=a0);  // Input selection.
+    Not(in=instruction[15], out=a1);
+    Or(a=a1, b=instruction[5], out=a2);  // Load when A-instruction or d1 set.
+    ARegister(in=a0, load=a2, out[0..14]=addressM, out=AOut);
+
+    // D register
+    And(a=instruction[15], b=instruction[4], out=d0);  // Load only when C-instruction and d2 set.
+    DRegister(in=ALUOut, load=d0, out=DOut);
+
+    // ALU
+    Mux16(a=AOut, b=inM, sel=instruction[12], out=AorMOut);  // Input selection.
+    ALU(x=DOut,
+        y=AorMOut,
+        zx=instruction[11],
+        nx=instruction[10],
+        zy=instruction[9],
+        ny=instruction[8],
+        f=instruction[7],
+        no=instruction[6],
+        out=outM,
+        out=ALUOut,
+        zr=zr,
+        ng=ng);
+    Not(in=zr, out=notzr);
+    Not(in=ng, out=notng);
+    And(a=notzr, b=notng, out=ps);  // Positive ALU output flag.
+
+    // Jump logic and program counter
+    And(a=instruction[0], b=ps, out=pc0);  // j3 and positive.
+    And(a=instruction[1], b=zr, out=pc1);  // j2 and zero.
+    And(a=instruction[2], b=ng, out=pc2);  // j1 and negative.
+
+    Or8Way(in[0]=pc0, in[1]=pc1, in[2]=pc2, in[3..7]=false, out=pc3);
+
+    And(a=pc3, b=instruction[15], out=pcLoad);  // Mandate C-instruction.
+
+    PC(in=AOut, inc=true, load=pcLoad, reset=reset, out[0..14]=pc);
+
+    // Write to M?
+    And(a=instruction[3], b=instruction[15], out=writeM);  // C-instruction and d3.
 }
