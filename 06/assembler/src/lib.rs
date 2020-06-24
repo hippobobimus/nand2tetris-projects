@@ -1,71 +1,13 @@
-pub mod config {
-    #[derive(Debug)]
-    pub struct Config {
-        pub infile: String,
-    }
-
-    impl Config {
-        pub fn new(mut args: std::env::Args) -> Result<Config, &'static str> {
-            args.next();
-
-            let infile = match args.next() {
-                Some(arg) => arg,
-                None => return Err("An input filename was not received."),
-            };
-
-            Ok(Config { infile })
-        }
-    }
-}
+pub mod error;
+pub mod runner;
+pub mod config;
+mod code_translator;
 
 pub mod parser {
-    use std::io::{self, BufReader, BufRead};
+    use std::io::{BufReader, BufRead};
     use std::fs::File;
-    use std::num::ParseIntError;
-    use std::fmt;
-    use std::error;
-
-    type Result<T> = std::result::Result<T, ParserError>;
-
-    #[derive(Debug)]
-    pub enum ParserError {
-        IO(io::Error),
-        ParseInt(ParseIntError),
-        Syntax(String),
-    }
-
-    impl fmt::Display for ParserError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match *self {
-                ParserError::IO(ref e) => e.fmt(f),
-                ParserError::ParseInt(ref e) => e.fmt(f),
-                ParserError::Syntax(ref e) =>
-                    write!(f, "Syntax error in line: {}", e),
-            }
-        }
-    }
-
-    impl error::Error for ParserError {
-        fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-            match *self {
-                ParserError::IO(ref e) => Some(e),
-                ParserError::ParseInt(ref e) => Some(e),
-                ParserError::Syntax(_) => None,
-            }
-        }
-    }
-
-    impl From<io::Error> for ParserError {
-        fn from(err: io::Error) -> ParserError {
-            ParserError::IO(err)
-        }
-    }
-
-    impl From<ParseIntError> for ParserError {
-        fn from(err: ParseIntError) -> ParserError {
-            ParserError::ParseInt(err)
-        }
-    }
+    use crate::code_translator;
+    use crate::error::{Error, ErrorKind, Result};
 
     #[derive(Debug)]
     pub struct Parser {
@@ -75,7 +17,7 @@ pub mod parser {
     }
     
     impl Parser {
-        /// Creates a new Parser instance.
+        /// Creates a new Parser instance from an input filename.
         /// 
         pub fn initialise(filename: &String) -> Result<Parser> {
             let file = File::open(filename)?;
@@ -112,7 +54,7 @@ pub mod parser {
                     return Ok(b);
                 },
                 Err(e) => {
-                    return Err(ParserError::IO(e));
+                    return Err(e.into());
                 }
             }
         }
@@ -127,20 +69,11 @@ pub mod parser {
             }
 
             if content.starts_with("@") {
-                match ACommand::new(content) {
-                    Ok(cmd) => return Ok(Some(Box::new(cmd))),
-                    Err(e) => return Err(e),
-                }
+                return Ok(Some(Box::new(ACommand::new(content)?)));
             } else if content.starts_with("(") {
-                match LCommand::new(content) {
-                    Ok(cmd) => return Ok(Some(Box::new(cmd))),
-                    Err(e) => return Err(e),
-                }
+                return Ok(Some(Box::new(LCommand::new(content)?)));
             } else {
-                match CCommand::new(content) {
-                    Ok(cmd) => return Ok(Some(Box::new(cmd))),
-                    Err(e) => return Err(e),
-                }
+                return Ok(Some(Box::new(CCommand::new(content)?)));
             };
         }
 
@@ -156,47 +89,80 @@ pub mod parser {
 
     // COMMANDS
     //
-    pub trait Command: std::fmt::Debug {}
-    pub trait SymbolicCommand: Command {}
-    impl<T: SymbolicCommand> Command for T {}
+    pub trait Command: std::fmt::Debug {
+    //    type CommandType;
+
+        fn translate(&self) -> Result<u16>;
+        //fn new(raw_content: &str) -> Result<T>;
+    }
+//    pub trait SymbolicCommand: Command {
+//        fn translate(&self) -> Result<u16>;
+//    }
+//    impl<T: SymbolicCommand> Command for T {}
 
     #[derive(Debug, PartialEq)]
     enum ALContent {
-        DecimalValue(u8),
+        DecimalValue(u16),
         Symbol(String),
     }
 
+    /// A-instruction
+    ///
     #[derive(Debug, PartialEq)]
     pub struct ACommand {
         content: ALContent,
     }
 
-    impl SymbolicCommand for ACommand {}
+    impl Command for ACommand {
+        //type CommandType = ACommand;
+
+        fn translate(&self) -> Result<u16> {
+            match self.content {
+                ALContent::DecimalValue(x) => {
+                    let y = x;
+                    return Ok(y);
+                },
+                ALContent::Symbol(_) => Ok(0),
+            }
+        }
+    }
 
     impl ACommand {
         fn new(raw_content: &str) -> Result<ACommand> {
             let content = raw_content.trim_matches('@');
 
-            match content.parse::<u8>() {
+            if content.is_empty() {
+                return Err(Error::new(ErrorKind::InvalidSyntax));
+            };
+
+            match content.parse::<u16>() {
                 Ok(n) => {
                     return Ok(ACommand { content: ALContent::DecimalValue(n) });
                 },
                 Err(_) => {
                     // 'kind' API only available in nightly
                     // extend later
-                    return Ok(ACommand { content: ALContent::Symbol(
-                                String::from(content)) });
+                    return Ok(ACommand {
+                            content: ALContent::Symbol(String::from(content))
+                    });
                 },
             }
         }
     }
 
+    /// L-instruction
+    ///
     #[derive(Debug, PartialEq)]
     pub struct LCommand {
         content: ALContent,
     }
 
-    impl SymbolicCommand for LCommand {}
+    impl Command for LCommand {
+        fn translate(&self) -> Result<u16> {
+            println!("to do...");
+            Ok(0)
+        }
+    }
 
     impl LCommand {
         fn new(raw_content: &str) -> Result<LCommand> {
@@ -209,6 +175,8 @@ pub mod parser {
         }
     }
 
+    /// C-instruction
+    ///
     #[derive(Debug, PartialEq)]
     pub struct CCommand {
         dest: Option<String>,
@@ -216,7 +184,30 @@ pub mod parser {
         jump: Option<String>,
     }
 
-    impl Command for CCommand {}
+    impl Command for CCommand {
+        fn translate(&self) -> Result<u16> {
+            let mut x = 0b1110_0000_0000_0000;
+            
+            let d = match self.dest {
+                Some(ref s) => code_translator::dest(&s[..])?,
+                None => 0b0000_0000_0000_0000,
+            };
+
+            let c = match self.comp {
+                Some(ref s) => code_translator::comp(&s[..])?,
+                None => 0b0000_0000_0000_0000,
+            };
+
+            let j = match self.jump {
+                Some(ref s) => code_translator::jump(&s[..])?,
+                None => 0b0000_0000_0000_0000,
+            };
+
+            x = x + d + c + j;
+
+            Ok(x)
+        }
+    }
 
     impl CCommand {
         fn new(content: &str) -> Result<CCommand> {
@@ -252,7 +243,7 @@ pub mod parser {
                 return Ok(CCommand {dest: None, comp, jump });
 
             } else {
-                return Err(ParserError::Syntax(String::from(content)));
+                return Err(Error::new(ErrorKind::InvalidSyntax));
             }
         }
     }
@@ -316,3 +307,4 @@ pub mod parser {
         }
     }
 }
+

@@ -1,7 +1,7 @@
 use std::env;
 use std::process;
 use assembler::config::Config;
-use assembler::parser::Parser;
+//use assembler::parser::Parser;
 
 fn main() {
     // let args: Vec<String> = env::args().collect();
@@ -11,28 +11,33 @@ fn main() {
         process::exit(1);
     });
 
-    println!("{:?}", config);
+    if let Err(e) = assembler::runner::run(config) {
+        eprintln!("Application error: {}", e);
+        process::exit(1);
+    }
 
-    let mut parser = Parser::initialise(&config.infile).unwrap();
-
-    println!("{:?}", parser);
-
-    for _ in 0..50 {
-        match parser.advance() {
-            Ok(0) => break,
-            Ok(_) => (),
-            Err(e) => panic!(e),
-        };
-
-        match &parser.cmd_buffer {
-            Some(cmd) => {
-            println!("{:?}", cmd);
-            },
-            None => (),
-        };
+//    println!("{:?}", config);
+//
+//    let mut parser = Parser::initialise(&config.infile).unwrap();
+//
+//    println!("{:?}", parser);
+//
+//    for _ in 0..50 {
+//        match parser.advance() {
+//            Ok(0) => break,
+//            Ok(_) => (),
+//            Err(e) => panic!(e),
+//        };
+//
+//        match &parser.cmd_buffer {
+//            Some(cmd) => {
+//            println!("{:?}\n", cmd);
+//            },
+//            None => (),
+//        };
 
 //        if parser.cmd_buffer == None {
 //            break
 //        };
-    }
+//    }
 }
