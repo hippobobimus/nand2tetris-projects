@@ -35,7 +35,7 @@ use regex::Regex;
 #[derive(Debug, PartialEq)]
 pub struct Config {
     pub infile: String,
-    outfile: String,
+    pub outfile: String,
 }
 
 impl Config {
@@ -60,12 +60,11 @@ impl Config {
     {
         args.next();
 
-        let re = Regex::new(r"\.asm$").unwrap();
+        let re_asm_ext = Regex::new(r"\.asm$").unwrap();
+
         let infile = match args.next() {
             Some(arg) => {
-        //        let re = Regex::new(r"\.asm$").unwrap();
-
-                if re.is_match(&arg[..]) {
+                if re_asm_ext.is_match(&arg[..]) {
                     arg
                 } else {
                     return Err(Error::new(ErrorKind::InvalidInFileExt));
@@ -76,17 +75,17 @@ impl Config {
 
         let outfile = match args.next() {
             Some(arg) => {
-                let re = Regex::new(r"\.hack$").unwrap();
+                let re_hack_ext = Regex::new(r"\.hack$").unwrap();
 
-                if re.is_match(&arg[..]) {
+                if re_hack_ext.is_match(&arg[..]) {
                     arg
                 } else {
                     return Err(Error::new(ErrorKind::InvalidInFileExt));
                 }
             }
             None => {
-                re.replace(&infile[..], ".hack")
-                //format!("{}.hack", infile)
+                re_asm_ext.replace(&infile[..], ".hack")
+                    .into_owned()
             },
         };
 

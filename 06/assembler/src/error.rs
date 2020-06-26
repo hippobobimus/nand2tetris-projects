@@ -39,6 +39,8 @@ pub enum ErrorKind {
     MissingInputFilename,
     InvalidInFileExt,
     InvalidOutFileExt,
+    RAMFull,
+    SymbolExists,
 }
 
 impl ErrorKind {
@@ -48,6 +50,8 @@ impl ErrorKind {
             ErrorKind::MissingInputFilename => "input filename not provided",
             ErrorKind::InvalidInFileExt => "invalid input file extension, only '.asm' accepted",
             ErrorKind::InvalidOutFileExt => "invalid output file extension, only '.hack' accepted",
+            ErrorKind::SymbolExists => "this symbol has already been defined",
+            ErrorKind::RAMFull => "there are no more free RAM addresses",
         }
     }
 }
