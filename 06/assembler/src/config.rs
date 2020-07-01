@@ -114,17 +114,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn check_invalid_infilename() {
-        let arg_0 = String::from("ignore/the/path");
-        let arg_1 = String::from("testfile.txt");
-        let arg_2 = String::from("outfile.hack");
-        let mut args = vec![arg_0, arg_1];
-        let args = args.drain(..);
-
-        assert_eq!(
-            Config::new(args),
-            Error::new(ErrorKind::InvalidInFileExt)
-        );
-    }
+//    #[test]
+//    fn check_invalid_infilename() {
+//        let arg_0 = String::from("ignore/the/path");
+//        let arg_1 = String::from("testfile.txt");
+//        let arg_2 = String::from("outfile.hack");
+//        let mut args = vec![arg_0, arg_1];
+//        let args = args.drain(..);
+//
+//        assert_eq!(
+//            Config::new(args),
+//            Error::new(ErrorKind::InvalidInFileExt)
+//        );
+//    }
 }

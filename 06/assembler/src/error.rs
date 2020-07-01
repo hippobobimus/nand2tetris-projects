@@ -35,6 +35,7 @@ enum Repr {
 }
 
 pub enum ErrorKind {
+    EndOfFile,
     InvalidSyntax,
     MissingInputFilename,
     InvalidInFileExt,
@@ -46,6 +47,7 @@ pub enum ErrorKind {
 impl ErrorKind {
     fn as_str(&self) -> &'static str {
         match *self {
+            ErrorKind::EndOfFile => "the end of the file has been reached",
             ErrorKind::InvalidSyntax => "invalid syntax",
             ErrorKind::MissingInputFilename => "input filename not provided",
             ErrorKind::InvalidInFileExt => "invalid input file extension, only '.asm' accepted",
