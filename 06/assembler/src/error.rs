@@ -37,6 +37,7 @@ enum Repr {
 pub enum ErrorKind {
     EndOfFile,
     InvalidSyntax,
+    InvalidCmdType,
     MissingInputFilename,
     InvalidInFileExt,
     InvalidOutFileExt,
@@ -49,6 +50,7 @@ impl ErrorKind {
         match *self {
             ErrorKind::EndOfFile => "the end of the file has been reached",
             ErrorKind::InvalidSyntax => "invalid syntax",
+            ErrorKind::InvalidCmdType => "this function cannot act on Commands of this type",
             ErrorKind::MissingInputFilename => "input filename not provided",
             ErrorKind::InvalidInFileExt => "invalid input file extension, only '.asm' accepted",
             ErrorKind::InvalidOutFileExt => "invalid output file extension, only '.hack' accepted",

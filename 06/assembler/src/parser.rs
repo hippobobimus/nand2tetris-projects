@@ -5,18 +5,18 @@ use regex::{Regex, RegexSet};
 //use crate::code_translator;
 use crate::error::{Error, ErrorKind, Result};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Command {
-    ACommand,
-    CCommand,
-    LCommand,
+    ACommand(String),
+    CCommand(String),
+    LCommand(String),
 }
 
 #[derive(Debug)]
 pub struct Parser {
-    pub command: Option<String>,
-    pub raw_line: String,
     reader: std::io::BufReader<File>,
+    pub raw_line: String,
+    pub command: Option<Command>,
 }
 
 impl Parser {
@@ -26,9 +26,9 @@ impl Parser {
         let file = File::open(filename)?;
 
         Ok(Parser {
-            command: None,
-            raw_line: String::new(),
             reader: BufReader::new(file),
+            raw_line: String::new(),
+            command: None,
         })
     }
 
@@ -43,55 +43,117 @@ impl Parser {
     ///
     pub fn advance(&mut self) -> Result<usize> {
         self.raw_line.clear();
+
         let bytes = self.reader.read_line(&mut self.raw_line)?;
 
-        self.set_command();
+        self.set_command()?;
 
         Ok(bytes)
     }
 
-    pub fn command_type(&self) -> Option<Command> {
-        let cmd = match self.command {
-            Some(ref c) => &c[..],
-            None => return None
-        };
-
-        let re_a = Regex::new(r"^@").unwrap();
-        let re_c = RegexSet::new(&[
-            r"^[[:alpha:]]+=[[:alpha:]1\-!+&|]+$",
-            r"^[[:alpha:]]+;[[:alpha:]]+$",
-        ]).unwrap();
-        //let re_c = Regex::new(r"^[[:alpha:]]+=[[:alpha:]]+$").unwrap();
-        let re_l = Regex::new(r"").unwrap();
-
-        if re_a.is_match(cmd) {
-            return Some(Command::ACommand);
-        } else if re_c.is_match(cmd) {
-            return Some(Command::CCommand);
-        } else if re_l.is_match(cmd) {
-            return Some(Command::LCommand);
-        } else {
-            panic!("Invalid syntax: {}", cmd);
-        }
-    }
-
-    fn set_command(&mut self) {
+    /// Takes the currently loaded raw line from the source file, strips it of
+    /// any comments and trims any remaining leading or trailing whitespace.
+    ///
+    /// The 'command' field of the Parser instance is then set to an Option
+    /// containing the resultant String, or None if the String is empty.
+    /// Subsequently, the 'command_type' is also set.
+    ///
+    fn set_command(&mut self) -> Result<usize> {
         self.command = None;
+
         let mut cmd = self.raw_line.clone();
 
         let comment_offset = cmd.find("//").unwrap_or(cmd.len());
 
         cmd.replace_range(comment_offset.., "");
+        let cmd = cmd.trim();
         
-        cmd = String::from(cmd.trim());
-
         if cmd.is_empty() {
-            self.command = None;
+            return Ok(0);
         } else {
-            self.command = Some(cmd);
+            self.set_command_type(cmd)?;
         }
+        Ok(0)
     }
-    
+
+    /// Returns an option containing the type of the current command
+    /// (A, C or L Command).  If there is no command present in the parser
+    /// then 'None' will be returned.
+    ///
+    fn set_command_type(&mut self, cmd: &str) -> Result<usize> {
+        let re_a = Regex::new(r"^@").unwrap();
+        let re_c = RegexSet::new(&[
+            r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+$",  // dest=comp
+            r"^[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // comp;jump
+            r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // dest=comp;jump
+        ]).unwrap();
+        let re_l = Regex::new(r"^\([[:alnum:]_]+\)$").unwrap();
+
+        if re_a.is_match(cmd) {
+            self.command = Some(Command::ACommand(String::from(cmd)));
+        } else if re_c.is_match(cmd) {
+            self.command = Some(Command::CCommand(String::from(cmd)));
+        } else if re_l.is_match(cmd) {
+            self.command = Some(Command::LCommand(String::from(cmd)));
+        } else {
+            return Err(Error::new(ErrorKind::InvalidSyntax));
+        }
+
+        Ok(0)
+    }
+
+    ///
+    ///
+    ///
+    pub fn symbol(&self) -> Result<String> {
+        let (symbol, re) = match self.command {
+            Some(Command::ACommand(ref cmd)) => {
+                (cmd.clone(), Regex::new(r"^@").unwrap())
+            },
+            Some(Command::LCommand(ref cmd)) => {
+                (cmd.clone(), Regex::new(r"^\(").unwrap())
+            },
+            _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
+        };
+
+        let symbol = String::from(re.replace(&symbol[..], ""));
+
+        Ok(symbol)
+    }
+
+    ///
+    ///
+    ///
+    pub fn dest(&self) -> Result<Option<String>> {
+        let (command, re) = match self.command {
+            Some(Command::CCommand(ref cmd)) => {
+                (cmd.clone(),
+                 //RegexSet::new(&[
+                 Regex::new(r"(?x)
+                    (^
+                    (?P<dest>[[:alpha:]]+)  # dest=comp
+                    =
+                    (?P<comp>[[:alpha:]01\-!+&|]+)
+                    )
+                 ").unwrap()
+                     //r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+$",  // dest=comp
+                     //r"^[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // comp;jump
+                     //r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // dest=comp;jump
+                 //]).unwrap()
+                )
+            },
+            _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
+        };
+
+        let caps = match re.captures(&command[..]) {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        let dest = String::from(caps.name("dest").unwrap().as_str());
+
+        Ok(Some(dest))
+    }
 }
 
 #[cfg(test)]
@@ -121,7 +183,24 @@ mod tests {
 
     #[test]
     fn command_type_assignment() {
-        let parser = temp_parser();
+        let mut parser = temp_parser();
+
+        let commands = vec![
+            Command::ACommand,
+            Command::ACommand,
+            Command::CCommand,
+            Command::CCommand,
+            Command::CCommand,
+            Command::LCommand,
+        ];
+
+        for cmd in commands {
+            parser.advance().unwrap();
+            assert_eq!(
+                parser.command_type().unwrap(),
+                cmd
+            );
+        }
     }
 }
 

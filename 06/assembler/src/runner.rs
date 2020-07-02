@@ -25,7 +25,9 @@ pub fn run(config: Config) -> Result<()> {
                 println!("----------");
                 println!("LINE: {}", parser.raw_line.trim());
                 println!("CMD: {:?}", parser.command);
-                println!("TYPE: {:?}", parser.command_type());
+                println!("SYMBOL: {:?}", parser.symbol());
+                println!("DEST: {:?}", parser.dest());
+                //println!("TYPE: {:?}", parser.command_type);
                 //let line = cmd.translate().unwrap();
                 //writeln!(&mut output_writer, "{:016b}", cmd)?;
             },
