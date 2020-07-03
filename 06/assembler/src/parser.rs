@@ -2,7 +2,6 @@ use std::io::{BufReader, BufRead};
 use std::fs::File;
 use std::path::Path;
 use regex::{Regex, RegexSet};
-//use crate::code_translator;
 use crate::error::{Error, ErrorKind, Result};
 
 #[derive(Debug, PartialEq)]
@@ -22,7 +21,7 @@ pub struct Parser {
 impl Parser {
     /// Creates a new Parser instance from an input filename.
     /// 
-    pub fn new(filename: &Path) -> Result<Parser> {  // &String
+    pub fn new(filename: &Path) -> Result<Parser> {
         let file = File::open(filename)?;
 
         Ok(Parser {
@@ -87,7 +86,7 @@ impl Parser {
             r"^[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // comp;jump
             r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // dest=comp;jump
         ]).unwrap();
-        let re_l = Regex::new(r"^\([[:alnum:]_]+\)$").unwrap();
+        let re_l = Regex::new(r"^\([[:word:]]+\)$").unwrap();
 
         if re_a.is_match(cmd) {
             self.command = Some(Command::ACommand(String::from(cmd)));
@@ -128,18 +127,7 @@ impl Parser {
         let (command, re) = match self.command {
             Some(Command::CCommand(ref cmd)) => {
                 (cmd.clone(),
-                 //RegexSet::new(&[
-                 Regex::new(r"(?x)
-                    (^
-                    (?P<dest>[[:alpha:]]+)  # dest=comp
-                    =
-                    (?P<comp>[[:alpha:]01\-!+&|]+)
-                    )
-                 ").unwrap()
-                     //r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+$",  // dest=comp
-                     //r"^[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // comp;jump
-                     //r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // dest=comp;jump
-                 //]).unwrap()
+                 Regex::new(r"(^(?P<dest>[[:alpha:]]+)=)").unwrap()
                 )
             },
             _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
@@ -154,6 +142,55 @@ impl Parser {
 
         Ok(Some(dest))
     }
+
+    ///
+    ///
+    ///
+    pub fn comp(&self) -> Result<Option<String>> {
+        let (command, re) = match self.command {
+            Some(Command::CCommand(ref cmd)) => {
+                (cmd.clone(),
+                 Regex::new(r"(?x)
+                    (^(?P<comp_0>[[:alpha:]01\-!+&|]+);) |
+                    (=(?P<comp_1>[[:alpha:]01\-!+&|]+);?)"
+                 ).unwrap()
+                )
+            },
+            _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
+        };
+
+        let caps = match re.captures(&command[..]) {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        let comp = String::from(caps.name("comp_0").or_else(|| caps.name("comp_1")).unwrap().as_str());
+
+        Ok(Some(comp))
+    }
+
+    ///
+    ///
+    ///
+    pub fn jump(&self) -> Result<Option<String>> {
+        let (command, re) = match self.command {
+            Some(Command::CCommand(ref cmd)) => {
+                (cmd.clone(),
+                 Regex::new(r"(;(?P<jump>[[:alpha:]]+)$)").unwrap()
+                )
+            },
+            _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
+        };
+
+        let caps = match re.captures(&command[..]) {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+
+        let jump = String::from(caps.name("jump").unwrap().as_str());
+
+        Ok(Some(jump))
+    }
 }
 
 #[cfg(test)]
@@ -162,16 +199,7 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    fn temp_parser() -> Parser {
-        let text = "\
-            @VAR_1          // Example A-command with symbol.\n\
-            @12             // Example A-command without symbol.\n\
-            AMD=D|A         // Example C-command dest=comp\n\
-            D&A;JNE         // Example C-command comp;jump\n\
-            A=!D;null       // Example C-command dest=comp;jump\n\
-            (LOOP_1)        // Example L-command.\
-            ";
-
+    fn temp_parser(text: &str) -> Parser {
         let mut file = NamedTempFile::new().unwrap();
 
         file.write_all(text.as_bytes()).unwrap();
@@ -182,235 +210,62 @@ mod tests {
     }
 
     #[test]
-    fn command_type_assignment() {
-        let mut parser = temp_parser();
+    fn command_assignment() {
+        let mut parser = temp_parser("\
+            @VAR_1          // Example A-command with symbol.\n\
+            @12             // Example A-command without symbol.\n\
+            AMD=D|A         // Example C-command dest=comp\n\
+            D&A;JNE         // Example C-command comp;jump\n\
+            A=!D;null       // Example C-command dest=comp;jump\n\
+            (LOOP_1)        // Example L-command.\
+            ");
 
         let commands = vec![
-            Command::ACommand,
-            Command::ACommand,
-            Command::CCommand,
-            Command::CCommand,
-            Command::CCommand,
-            Command::LCommand,
+            Command::ACommand(String::from("@VAR_1")),
+            Command::ACommand(String::from("@12")),
+            Command::CCommand(String::from("AMD=D|A")),
+            Command::CCommand(String::from("D&A;JNE")),
+            Command::CCommand(String::from("A=!D;null")),
+            Command::LCommand(String::from("(LOOP_1)")),
         ];
 
         for cmd in commands {
             parser.advance().unwrap();
             assert_eq!(
-                parser.command_type().unwrap(),
+                parser.command.take().unwrap(),
                 cmd
             );
         }
     }
+
+    #[test]
+    fn dest_comp_jump_assignment() {
+        let mut parser = temp_parser("\
+            AMD=D|A         // Example C-command dest=comp\n\
+            D&A;JNE         // Example C-command comp;jump\n\
+            A=!D;null       // Example C-command dest=comp;jump\n\
+            ");
+
+        let commands = vec![
+            ("AMD", "D|A", ""),
+            ("", "D&A", "JNE"),
+            ("A", "!D", "null"),
+        ];
+
+        for cmd in commands {
+            parser.advance().unwrap();
+            assert_eq!(
+                String::from(cmd.0),
+                parser.dest().unwrap().unwrap_or(String::from(""))
+            );
+            assert_eq!(
+                String::from(cmd.1),
+                parser.comp().unwrap().unwrap_or(String::from(""))
+            );
+            assert_eq!(
+                String::from(cmd.2),
+                parser.jump().unwrap().unwrap_or(String::from(""))
+            );
+        }
+    }
 }
-
-// COMMANDS
-//
-//pub trait Command: std::fmt::Debug {
-//    fn translate(&self) -> Result<u16>;
-//}
-//
-//#[derive(Debug, PartialEq)]
-//enum ALContent {
-//    DecimalValue(u16),
-//    Symbol(String),
-//}
-//
-///// A-instruction
-/////
-//#[derive(Debug, PartialEq)]
-//pub struct ACommand {
-//    content: ALContent,
-//}
-//
-//impl Command for ACommand {
-//    fn translate(&self) -> Result<u16> {
-//        match self.content {
-//            ALContent::DecimalValue(x) => {
-//                let y = x;
-//                return Ok(y);
-//            },
-//            ALContent::Symbol(_) => Ok(0),
-//        }
-//    }
-//}
-//
-//impl ACommand {
-//    fn new(raw_content: &str) -> Result<ACommand> {
-//        let content = raw_content.trim_matches('@');
-//
-//        if content.is_empty() {
-//            return Err(Error::new(ErrorKind::InvalidSyntax));
-//        };
-//
-//        match content.parse::<u16>() {
-//            Ok(n) => {
-//                return Ok(ACommand { content: ALContent::DecimalValue(n) });
-//            },
-//            Err(_) => {
-//                // 'kind' API only available in nightly
-//                // extend later
-//                return Ok(ACommand {
-//                        content: ALContent::Symbol(String::from(content))
-//                });
-//            },
-//        }
-//    }
-//}
-//
-///// L-instruction
-/////
-//#[derive(Debug, PartialEq)]
-//pub struct LCommand {
-//    content: ALContent,
-//}
-//
-//impl Command for LCommand {
-//    fn translate(&self) -> Result<u16> {
-//        println!("to do...");
-//        Ok(0)
-//    }
-//}
-//
-//impl LCommand {
-//    fn new(raw_content: &str) -> Result<LCommand> {
-//        let chars_to_trim: &[char] = &['(', ')'];
-//        
-//        let content = ALContent::Symbol(String::from(
-//                raw_content.trim_matches(chars_to_trim)));
-//
-//        Ok(LCommand { content })
-//    }
-//}
-//
-///// C-instruction
-/////
-//#[derive(Debug, PartialEq)]
-//pub struct CCommand {
-//    dest: Option<String>,
-//    comp: Option<String>,
-//    jump: Option<String>,
-//}
-//
-//impl Command for CCommand {
-//    fn translate(&self) -> Result<u16> {
-//        let mut x = 0b1110_0000_0000_0000;
-//        
-//        let d = match self.dest {
-//            Some(ref s) => code_translator::dest(&s[..])?,
-//            None => 0b0000_0000_0000_0000,
-//        };
-//
-//        let c = match self.comp {
-//            Some(ref s) => code_translator::comp(&s[..])?,
-//            None => 0b0000_0000_0000_0000,
-//        };
-//
-//        let j = match self.jump {
-//            Some(ref s) => code_translator::jump(&s[..])?,
-//            None => 0b0000_0000_0000_0000,
-//        };
-//
-//        x = x + d + c + j;
-//
-//        Ok(x)
-//    }
-//}
-//
-//impl CCommand {
-//    fn new(content: &str) -> Result<CCommand> {
-//        let contains_equals = content.contains('=');
-//        let contains_semicolon = content.contains(';');
-//
-//        if contains_equals && contains_semicolon {
-//            // dest=comp;jump
-//            let mut cmd_iter = content.split(|c| c == '=' || c == ';')
-//                .map(|x| String::from(x));
-//            let dest = cmd_iter.next();
-//            let comp = cmd_iter.next();
-//            let jump = cmd_iter.next();
-//
-//            return Ok(CCommand {dest, comp, jump });
-//
-//        } else if contains_equals {
-//            // dest=comp
-//            let mut cmd_iter = content.split('=')
-//                .map(|x| String::from(x));
-//            let dest = cmd_iter.next();
-//            let comp = cmd_iter.next();
-//
-//            return Ok(CCommand { dest, comp, jump: None });
-//
-//        } else if contains_semicolon {
-//            // comp;jump
-//            let mut cmd_iter = content.split(';')
-//                .map(|x| String::from(x));
-//            let comp = cmd_iter.next();
-//            let jump = cmd_iter.next();
-//
-//            return Ok(CCommand {dest: None, comp, jump });
-//
-//        } else {
-//            return Err(Error::new(ErrorKind::InvalidSyntax));
-//        }
-//    }
-//}
-
-//#[cfg(test)]
-//mod tests {
-//    use super::{*, ALContent::*};
-//
-//    #[test]
-//    fn general_command_initialiser() {
-//
-//    }
-//
-//    #[test]
-//    fn a_command_initialiser() {
-//        let a_cmd_decimal = ACommand::new("@18").unwrap();
-//        let a_cmd_symbol = ACommand::new("@R1").unwrap();
-//        
-//        assert_eq!(a_cmd_decimal, ACommand {
-//            content: DecimalValue(18)
-//        });
-//        assert_eq!(a_cmd_symbol, ACommand {
-//            content: Symbol(String::from("R1"))
-//        });
-//    }
-//
-//    #[test]
-//    fn l_command_initialiser() {
-//        let l_cmd_decimal = LCommand::new("(9)").unwrap();
-//        let l_cmd_symbol = LCommand::new("(LOOP)").unwrap();
-//        
-//        assert_eq!(l_cmd_decimal, LCommand {
-//            content: Symbol(String::from("9"))
-//        });
-//        assert_eq!(l_cmd_symbol, LCommand {
-//            content: Symbol(String::from("LOOP"))
-//        });
-//    }
-//
-//    #[test]
-//    fn c_command_initialiser() {
-//        let c_cmd_1 = CCommand::new("DEST=COMP;JUMP").unwrap();
-//        let c_cmd_2 = CCommand::new("COMP;JUMP").unwrap();
-//        let c_cmd_3 = CCommand::new("DEST=COMP").unwrap();
-//
-//        assert_eq!(c_cmd_1, CCommand {
-//            dest: Some(String::from("DEST")),
-//            comp: Some(String::from("COMP")),
-//            jump: Some(String::from("JUMP"))
-//        }); 
-//        assert_eq!(c_cmd_2, CCommand {
-//            dest: None,
-//            comp: Some(String::from("COMP")),
-//            jump: Some(String::from("JUMP"))
-//        }); 
-//        assert_eq!(c_cmd_3, CCommand {
-//            dest: Some(String::from("DEST")),
-//            comp: Some(String::from("COMP")),
-//            jump: None
-//        }); 
-//    }
-//}
