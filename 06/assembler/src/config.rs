@@ -1,35 +1,6 @@
 use crate::error::{Error, ErrorKind, Result};
 use regex::Regex;
 
-//struct Cacher<T>
-//    where T: FnOnce() -> Regex
-//{
-//    calc: T,
-//    value: Option<Regex>,
-//}
-//
-//impl<T> Cacher<T>
-//    where T: FnOnce() -> Regex
-//{
-//    fn new(calc: T) -> Cacher<T> {
-//        Cacher {
-//            calc,
-//            value: None,
-//        }
-//    }
-//
-//    fn value(&mut self) -> &Regex {
-//        match self.value {
-//            Some(ref v) => v,
-//            None => {
-//                let v = (self.calc)();
-//                self.value = Some(v);
-//                self.value.as_ref().unwrap()
-//            },
-//        }
-//    }
-//}
-
 /// A struct to hold configuration options used when running the assembler.
 ///
 #[derive(Debug, PartialEq)]
@@ -58,7 +29,7 @@ impl Config {
     where
         T: Iterator<Item = String>,
     {
-        args.next();
+        args.next();  // Ignore path of executable.
 
         let re_asm_ext = Regex::new(r"\.asm$").unwrap();
 
@@ -70,7 +41,7 @@ impl Config {
                     return Err(Error::new(ErrorKind::InvalidInFileExt));
                 }
             },
-            None => return Err(Error::new(ErrorKind::MissingInputFilename)),
+            None => return Err(Error::new(ErrorKind::MissingArguments)),
         };
 
         let outfile = match args.next() {
@@ -80,12 +51,14 @@ impl Config {
                 if re_hack_ext.is_match(&arg[..]) {
                     arg
                 } else {
-                    return Err(Error::new(ErrorKind::InvalidInFileExt));
+                    //arg + ".hack"
+                    return Err(Error::new(ErrorKind::InvalidOutFileExt));
                 }
             }
             None => {
-                re_asm_ext.replace(&infile[..], ".hack")
-                    .into_owned()
+                return Err(Error::new(ErrorKind::MissingOutputFilename));
+//                re_asm_ext.replace(&infile[..], ".hack")
+//                    .into_owned()
             },
         };
 
@@ -102,7 +75,7 @@ mod tests {
         let arg_0 = String::from("ignore/the/path");
         let arg_1 = String::from("test_input_file.asm");
         let arg_2 = String::from("test_output_file.hack");
-        let mut args = vec![arg_0, arg_1];
+        let mut args = vec![arg_0, arg_1, arg_2];
         let args = args.drain(..);
 
         assert_eq!(
@@ -113,7 +86,6 @@ mod tests {
             }
         );
     }
-
 //    #[test]
 //    fn check_invalid_infilename() {
 //        let arg_0 = String::from("ignore/the/path");

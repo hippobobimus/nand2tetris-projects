@@ -86,7 +86,7 @@ impl Parser {
             r"^[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // comp;jump
             r"^[[:alpha:]]+=[[:alpha:]01\-!+&|]+;[[:alpha:]]+$",  // dest=comp;jump
         ]).unwrap();
-        let re_l = Regex::new(r"^\([[:word:]]+\)$").unwrap();
+        let re_l = Regex::new(r"^\([[:word:].$]+\)$").unwrap();
 
         if re_a.is_match(cmd) {
             self.command = Some(Command::ACommand(String::from(cmd)));
@@ -107,15 +107,15 @@ impl Parser {
     pub fn symbol(&self) -> Result<String> {
         let (symbol, re) = match self.command {
             Some(Command::ACommand(ref cmd)) => {
-                (cmd.clone(), Regex::new(r"^@").unwrap())
+                (cmd.clone(), Regex::new(r"^@(?P<symbol>[[:word:].$]+)$").unwrap())
             },
             Some(Command::LCommand(ref cmd)) => {
-                (cmd.clone(), Regex::new(r"^\(").unwrap())
+                (cmd.clone(), Regex::new(r"^[\(](?P<symbol>[[:word:].$]+)[\)]$").unwrap())
             },
             _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
         };
 
-        let symbol = String::from(re.replace(&symbol[..], ""));
+        let symbol = String::from(re.replace(&symbol[..], "$symbol"));
 
         Ok(symbol)
     }

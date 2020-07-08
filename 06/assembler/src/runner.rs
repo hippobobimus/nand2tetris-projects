@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::parser::{Command, Parser};
 use crate::error::{Result};
 use crate::code_translator;
+use crate::symbols::SymbolTable;
 
 pub fn run(config: Config) -> Result<()> {
     println!("{:?}", config);
@@ -19,6 +20,65 @@ pub fn run(config: Config) -> Result<()> {
     let output_file = File::create(config.outfile).unwrap();
     let mut output_writer = BufWriter::new(&output_file);
 
+    // First pass
+    let mut sym_tab = SymbolTable::new();
+
+    println!("Symbol table before: {:?}", sym_tab);
+
+    let mut rom_addr = 0;
+
+    loop {
+        match parser.advance() {
+            Ok(0) => break,  // EOF
+            Ok(_) => {
+                match parser.command {
+                    Some(Command::ACommand(_)) => {
+                        rom_addr += 1;
+
+//                        let symbol = parser.symbol().unwrap();
+//                        println!("here sym1: {}", symbol);
+//
+//                        match symbol.parse::<u16>() {
+//                            Ok(_) => continue,
+//                            Err(_) => {
+//                                println!("here sym2: {}", symbol);
+//                                println!("here symbool: {}", sym_tab.contains(&symbol));
+//                                if sym_tab.contains(&symbol) {
+//                                    continue;
+//                                } else {
+//                                    sym_tab.add_entry(symbol)?;
+//                                }
+//                            },
+//                        }
+                    },
+                    Some(Command::CCommand(_)) => {
+                        rom_addr += 1;
+                    },
+                    Some(Command::LCommand(_)) => {
+                        let symbol = parser.symbol().unwrap();
+                        println!("here sym: {}", symbol);
+
+                        sym_tab.add_entry(symbol, rom_addr)?;
+                    },
+                    None => continue,
+                };
+            },
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    println!("Symbol table after: {:?}", sym_tab);
+
+    // reset parser
+    let mut parser = Parser::new(path)?;
+
+//        if self.next_free_address > 16383 {
+//            return Err(Error::new(ErrorKind::RAMFull));
+//        }
+
+    let mut ram_addr = 16;
+
+    // Second pass
     loop {
         match parser.advance() {
             Ok(0) => break,  // EOF
@@ -33,7 +93,21 @@ pub fn run(config: Config) -> Result<()> {
  
                 let line = match parser.command {
                     Some(Command::ACommand(_)) => {
-                        parser.symbol().unwrap().parse::<u16>()?
+                        let symbol = parser.symbol().unwrap();
+
+                        match symbol.parse::<u16>() {
+                            Ok(b) => b,
+                            Err(_) => {
+                                if sym_tab.contains(&symbol) {
+                                    sym_tab.get_address(&symbol).unwrap()
+                                } else {
+                                    let addr = sym_tab.add_entry(symbol, ram_addr)?;
+                                    ram_addr += 1;
+                                    addr
+                                }
+                            },
+                        }
+                        //parser.symbol().unwrap().parse::<u16>()?
                         //println!("Binary: {:016b}", b);
                     },
                     Some(Command::CCommand(_)) => {
@@ -59,7 +133,9 @@ pub fn run(config: Config) -> Result<()> {
                         //println!("Binary: {:016b}", b);
                     },
                     Some(Command::LCommand(_)) => {
-                        1
+                        continue;
+//                        let symbol = parser.symbol().unwrap();
+//                        sym_tab.get_address(&symbol).unwrap()
                     },
                     None => continue,
                 };
