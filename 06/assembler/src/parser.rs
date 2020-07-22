@@ -16,6 +16,8 @@ pub struct Parser {
     reader: std::io::BufReader<File>,
     pub raw_line: String,
     pub command: Option<Command>,
+    rom_addr: u16,
+    ram_addr: u16,
 }
 
 impl Parser {
@@ -28,6 +30,8 @@ impl Parser {
             reader: BufReader::new(file),
             raw_line: String::new(),
             command: None,
+            rom_addr: 0,
+            ram_addr: 16,
         })
     }
 
@@ -190,6 +194,40 @@ impl Parser {
         let jump = String::from(caps.name("jump").unwrap().as_str());
 
         Ok(Some(jump))
+    }
+
+    ///
+    ///
+    ///
+    pub fn get_ram_addr(&self) -> u16 {
+        self.ram_addr
+    }
+
+    ///
+    ///
+    ///
+    pub fn inc_ram_addr(&mut self) -> Result<u8> {
+        if self.ram_addr == 16383 {
+            return Err(Error::new(ErrorKind::RAMFull));
+        }
+
+        self.ram_addr += 1;
+
+        Ok(0)
+    }
+
+    ///
+    ///
+    ///
+    pub fn get_rom_addr(&self) -> u16 {
+        self.rom_addr
+    }
+
+    ///
+    ///
+    ///
+    pub fn inc_rom_addr(&mut self) {
+        self.rom_addr += 1;
     }
 }
 
