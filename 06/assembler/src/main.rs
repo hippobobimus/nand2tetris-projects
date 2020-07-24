@@ -1,6 +1,6 @@
 use std::env;
 use std::process;
-use assembler::config::Config;
+use assembler::Config;
 use env_logger;
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
 
     log::debug!("Config generated from arguments\n{:#?}", config);
 
-    if let Err(e) = assembler::runner::run(config) {
+    if let Err(e) = assembler::run(config) {
         eprintln!("Application error: {}", e);
         process::exit(1);
     }

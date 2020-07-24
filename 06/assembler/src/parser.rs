@@ -1,8 +1,9 @@
-use std::io::{BufReader, BufRead};
+use std::io::{BufReader, BufRead, Seek, SeekFrom};
 use std::fs::File;
 use std::path::Path;
 use regex::{Regex, RegexSet};
 use crate::error::{Error, ErrorKind, Result};
+use crate::symbols::SymbolTable;
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
@@ -14,10 +15,11 @@ pub enum Command {
 #[derive(Debug)]
 pub struct Parser {
     reader: std::io::BufReader<File>,
-    pub raw_line: String,
-    pub command: Option<Command>,
+    raw_line: String,
+    command: Option<Command>,
     rom_addr: u16,
     ram_addr: u16,
+    symbol_table: SymbolTable,
 }
 
 impl Parser {
@@ -32,6 +34,7 @@ impl Parser {
             command: None,
             rom_addr: 0,
             ram_addr: 16,
+            symbol_table: SymbolTable::new(),
         })
     }
 
@@ -197,37 +200,76 @@ impl Parser {
     }
 
     ///
-    ///
-    ///
-    pub fn get_ram_addr(&self) -> u16 {
-        self.ram_addr
+    pub fn get_raw_line(&self) -> &String {
+        &self.raw_line
     }
 
     ///
+    pub fn get_command(&self) -> &Option<Command> {
+        &self.command
+    }
+
+//    ///
+//    ///
+//    ///
+//    pub fn get_ram_addr(&self) -> u16 {
+//        self.ram_addr
+//    }
+
     ///
     ///
-    pub fn inc_ram_addr(&mut self) -> Result<u8> {
-        if self.ram_addr == 16383 {
-            return Err(Error::new(ErrorKind::RAMFull));
-        }
+    ///
+    pub fn inc_ram_address(&mut self) -> Result<u8> {
+        self.symbol_table.inc_ram_address()
+//        if self.ram_addr == 16383 {
+//            return Err(Error::new(ErrorKind::RAMFull));
+//        }
+//
+//        self.ram_addr += 1;
+//
+//        Ok(0)
+    }
 
-        self.ram_addr += 1;
+//    ///
+//    ///
+//    ///
+//    pub fn get_rom_addr(&self) -> u16 {
+//        self.rom_addr
+//    }
 
-        Ok(0)
+    ///
+    ///
+    ///
+    pub fn inc_rom_address(&mut self) {
+        self.symbol_table.inc_rom_address();
+//        self.rom_addr += 1;
+    }
+
+//    ///
+//    pub fn get_sym_table(&self) -> &SymbolTable {
+//        &self.sym_table
+//    }
+
+    ///
+    pub fn insert_label(&mut self, symbol: &str) -> Result<u16> {
+        self.symbol_table.insert_label(symbol)
     }
 
     ///
-    ///
-    ///
-    pub fn get_rom_addr(&self) -> u16 {
-        self.rom_addr
+    pub fn insert_variable(&mut self, symbol: &str) -> Result<u16> {
+        self.symbol_table.insert_variable(symbol)
     }
 
     ///
+    pub fn get_symbol_address(&self, symbol: &str) -> Option<u16> {
+        self.symbol_table.get_address(symbol)
+    }
+
     ///
-    ///
-    pub fn inc_rom_addr(&mut self) {
-        self.rom_addr += 1;
+    pub fn reset(&mut self) {
+        self.reader.get_mut().seek(SeekFrom::Start(0)).unwrap();
+        self.raw_line.clear();
+        self.command = None;
     }
 }
 
