@@ -5,6 +5,9 @@ use regex::{Regex, RegexSet};
 use crate::error::{Error, ErrorKind, Result};
 use crate::symbols::SymbolTable;
 
+/// Different types of Command; A- or C-instructions, or L-pseudocommands along with their String
+/// representation.
+///
 #[derive(Debug, PartialEq)]
 pub enum Command {
     ACommand(String),
@@ -12,18 +15,24 @@ pub enum Command {
     LCommand(String),
 }
 
+/// A struct that encapsulates the current state of the parser.  It holds a BufReader for the input
+/// file, as well as the last raw line read and any command contained within that line.  A
+/// SymbolTable tracks variable and label symbols along with their allocated RAM/ROM addresses.
+///
 #[derive(Debug)]
 pub struct Parser {
     reader: std::io::BufReader<File>,
     raw_line: String,
     command: Option<Command>,
-    rom_addr: u16,
-    ram_addr: u16,
     symbol_table: SymbolTable,
 }
 
 impl Parser {
-    /// Creates a new Parser instance from an input filename.
+    /// Takes a reference to the Path of an input file and returns a Result containing a new Parser
+    /// instance.
+    ///
+    /// An error will be returned if opening the file identified by the given Path returns an
+    /// error.
     /// 
     pub fn new(filename: &Path) -> Result<Parser> {
         let file = File::open(filename)?;
@@ -32,18 +41,15 @@ impl Parser {
             reader: BufReader::new(file),
             raw_line: String::new(),
             command: None,
-            rom_addr: 0,
-            ram_addr: 16,
             symbol_table: SymbolTable::new(),
         })
     }
 
-    /// Reads the next line from the source file and extracts a command string
-    /// if present.  The 'command' option field of the Parser instance is updated
-    /// accordingly.
+    /// Reads the next line and extracts a command string if present, updating the 'command' option
+    /// field of the Parser instance appropriately.
     /// 
-    /// Returns a result containing the number of bytes present in the original
-    /// line in the source file.
+    /// Returns a result containing the number of bytes present in the original line read from the
+    /// source file.
     ///
     /// Ok(0) will be returned when EOF is reached.
     ///
@@ -57,12 +63,11 @@ impl Parser {
         Ok(bytes)
     }
 
-    /// Takes the currently loaded raw line from the source file, strips it of
-    /// any comments and trims any remaining leading or trailing whitespace.
+    /// Takes the currently loaded raw line from the source file, strips it of any comments and
+    /// trims any remaining leading or trailing whitespace.
     ///
-    /// The 'command' field of the Parser instance is then set to an Option
-    /// containing the resultant String, or None if the String is empty.
-    /// Subsequently, the 'command_type' is also set.
+    /// If the remaining line content is not empty, then it is used to set the 'command' field of
+    /// the Parser instance.  Otherwise the 'command' field is set to None.
     ///
     fn set_command(&mut self) -> Result<usize> {
         self.command = None;
@@ -82,9 +87,10 @@ impl Parser {
         Ok(0)
     }
 
-    /// Returns an option containing the type of the current command
-    /// (A, C or L Command).  If there is no command present in the parser
-    /// then 'None' will be returned.
+    /// Takes an input &str and determines whether it is an A-, C- or L-command, setting the
+    /// 'command' field fo the Parser instance appropriately.
+    ///
+    /// Returns Ok(0) upon successful execution.
     ///
     fn set_command_type(&mut self, cmd: &str) -> Result<usize> {
         let re_a = Regex::new(r"^@").unwrap();
@@ -108,11 +114,13 @@ impl Parser {
         Ok(0)
     }
 
+    /// Returns a Result containing the variable or label symbol, or decimal string contained
+    /// within the current command.
     ///
-    ///
+    /// This method can only be called on A- or L-commands and will otherwise return an error.
     ///
     pub fn symbol(&self) -> Result<String> {
-        let (symbol, re) = match self.command {
+        let (raw_symbol, re) = match self.command {
             Some(Command::ACommand(ref cmd)) => {
                 (cmd.clone(), Regex::new(r"^@(?P<symbol>[[:word:].$]+)$").unwrap())
             },
@@ -122,13 +130,15 @@ impl Parser {
             _ => return Err(Error::new(ErrorKind::InvalidCmdType)),
         };
 
-        let symbol = String::from(re.replace(&symbol[..], "$symbol"));
+        let symbol = String::from(re.replace(&raw_symbol[..], "$symbol"));
 
         Ok(symbol)
     }
 
+    /// Returns an Option containing the 'dest' component of the current C-command string, within
+    /// an outer Result.
     ///
-    ///
+    /// This method can only be called on C-commands and will otherwise return an error.
     ///
     pub fn dest(&self) -> Result<Option<String>> {
         let (command, re) = match self.command {
@@ -150,8 +160,10 @@ impl Parser {
         Ok(Some(dest))
     }
 
+    /// Returns an Option containing the 'comp' component of the current C-command string, within
+    /// an outer Result.
     ///
-    ///
+    /// This method can only be called on C-commands and will otherwise return an error.
     ///
     pub fn comp(&self) -> Result<Option<String>> {
         let (command, re) = match self.command {
@@ -176,8 +188,10 @@ impl Parser {
         Ok(Some(comp))
     }
 
+    /// Returns an Option containing the 'jump' component of the current C-command string, within
+    /// an outer Result.
     ///
-    ///
+    /// This method can only be called on C-commands and will otherwise return an error.
     ///
     pub fn jump(&self) -> Result<Option<String>> {
         let (command, re) = match self.command {
@@ -199,72 +213,55 @@ impl Parser {
         Ok(Some(jump))
     }
 
+    /// Returns a reference to the last raw line from the input file read by the Parser.
     ///
     pub fn get_raw_line(&self) -> &String {
         &self.raw_line
     }
 
+    /// Returns a reference to an Option containing the current Command loaded into the Parser.
     ///
     pub fn get_command(&self) -> &Option<Command> {
         &self.command
     }
 
-//    ///
-//    ///
-//    ///
-//    pub fn get_ram_addr(&self) -> u16 {
-//        self.ram_addr
-//    }
-
-    ///
-    ///
+    /// Increments the next available RAM address used when adding a new variable to the symbol
+    /// table.
     ///
     pub fn inc_ram_address(&mut self) -> Result<u8> {
         self.symbol_table.inc_ram_address()
-//        if self.ram_addr == 16383 {
-//            return Err(Error::new(ErrorKind::RAMFull));
-//        }
-//
-//        self.ram_addr += 1;
-//
-//        Ok(0)
     }
 
-//    ///
-//    ///
-//    ///
-//    pub fn get_rom_addr(&self) -> u16 {
-//        self.rom_addr
-//    }
-
-    ///
-    ///
+    /// Increments the next available ROM address used when adding a new label to the symbol
+    /// table.
     ///
     pub fn inc_rom_address(&mut self) {
         self.symbol_table.inc_rom_address();
-//        self.rom_addr += 1;
     }
 
-//    ///
-//    pub fn get_sym_table(&self) -> &SymbolTable {
-//        &self.sym_table
-//    }
-
+    /// Adds a new label to the symbol table and returns a Result containing the allocated ROM
+    /// address.
     ///
     pub fn insert_label(&mut self, symbol: &str) -> Result<u16> {
         self.symbol_table.insert_label(symbol)
     }
 
+    /// Adds a new variable to the symbol table and returns a Result containing the allocated RAM
+    /// address.
     ///
     pub fn insert_variable(&mut self, symbol: &str) -> Result<u16> {
         self.symbol_table.insert_variable(symbol)
     }
 
+    /// Takes a symbol &str and returns an Option containing the RAM/ROM address allocated to it.
+    /// None is returned if the symbol is not present in the symbol table.
     ///
     pub fn get_symbol_address(&self, symbol: &str) -> Option<u16> {
         self.symbol_table.get_address(symbol)
     }
 
+    /// Clears the current raw line and command loaded into the Parser instance and resets it back
+    /// to reading from the beginning of the source file.
     ///
     pub fn reset(&mut self) {
         self.reader.get_mut().seek(SeekFrom::Start(0)).unwrap();
@@ -290,23 +287,23 @@ mod tests {
     }
 
     #[test]
-    fn command_assignment() {
+    fn command_assignment_and_eof() {
         let mut parser = temp_parser("\
-            @VAR_1          // Example A-command with symbol.\n\
+            @VAR_1.$TEST    // Example A-command with variable symbol.\n\
             @12             // Example A-command without symbol.\n\
             AMD=D|A         // Example C-command dest=comp\n\
             D&A;JNE         // Example C-command comp;jump\n\
             A=!D;null       // Example C-command dest=comp;jump\n\
-            (LOOP_1)        // Example L-command.\
+            ($TEST.LOOP_1)  // Example L-command with label symbol.\
             ");
 
         let commands = vec![
-            Command::ACommand(String::from("@VAR_1")),
+            Command::ACommand(String::from("@VAR_1.$TEST")),
             Command::ACommand(String::from("@12")),
             Command::CCommand(String::from("AMD=D|A")),
             Command::CCommand(String::from("D&A;JNE")),
             Command::CCommand(String::from("A=!D;null")),
-            Command::LCommand(String::from("(LOOP_1)")),
+            Command::LCommand(String::from("($TEST.LOOP_1)")),
         ];
 
         for cmd in commands {
@@ -316,6 +313,65 @@ mod tests {
                 cmd
             );
         }
+
+        let eof = parser.advance().unwrap();
+
+        assert_eq!(eof, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid syntax")]
+    fn command_syntax_error() {
+        let mut parser = temp_parser("\
+            notacommand\n\
+            ");
+
+        parser.advance().unwrap();
+    }
+
+    #[test]
+    fn retrieve_symbol() {
+        let mut parser = temp_parser("\
+            @VAR_1.$TEST    // Example A-command with variable symbol.\n\
+            ($TEST.LOOP_1)  // Example L-command with label symbol.\n\
+            ");
+
+        let expected = vec![
+            "VAR_1.$TEST",
+            "$TEST.LOOP_1",
+        ];
+
+        for item in expected {
+            parser.advance().unwrap();
+
+            let symbol = parser.symbol().unwrap();
+
+            assert_eq!(item, symbol);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn retrieve_symbol_from_c_cmd() {
+        let mut parser = temp_parser("\
+            AMD=D|A         // Example C-command dest=comp\n\
+            ");
+
+        parser.advance().unwrap();
+
+        parser.symbol().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn retrieve_symbol_from_non_cmd() {
+        let mut parser = temp_parser("\
+            // Just a comment line, not a command.\n\
+            ");
+
+        parser.advance().unwrap();
+
+        parser.symbol().unwrap();
     }
 
     #[test]
@@ -347,5 +403,86 @@ mod tests {
                 parser.jump().unwrap().unwrap_or(String::from(""))
             );
         }
+    }
+
+    fn test_a_cmd() -> Parser {
+        let mut parser = temp_parser("\
+            @VAR_1.$TEST    // Example A-command with variable symbol.\n\
+            ");
+
+        parser.advance().unwrap();
+
+        parser
+    }
+
+    fn test_l_cmd() -> Parser {
+        let mut parser = temp_parser("\
+            ($TEST.LOOP_1)  // Example L-command with label symbol.\n\
+            ");
+
+        parser.advance().unwrap();
+
+        parser
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn dest_invalid_a_cmd() {
+        test_a_cmd().dest().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn dest_invalid_l_cmd() {
+        test_l_cmd().dest().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn comp_invalid_a_cmd() {
+        test_a_cmd().comp().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn comp_invalid_l_cmd() {
+        test_l_cmd().comp().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn jump_invalid_a_cmd() {
+        test_a_cmd().jump().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "this function cannot act on Commands of this type")]
+    fn jump_invalid_l_cmd() {
+        test_l_cmd().jump().unwrap();
+    }
+    #[test]
+    fn check_reset() {
+        let mut parser = temp_parser("\
+            @VAR_1.$TEST    // Example A-command with variable symbol.\n\
+            ($TEST.LOOP_1)  // Example L-command with label symbol.\n\
+            ");
+        
+        let expected = vec![
+            "@VAR_1.$TEST    // Example A-command with variable symbol.\n",
+            "($TEST.LOOP_1)  // Example L-command with label symbol.\n",
+        ];
+
+        parser.advance().unwrap();
+        assert_eq!(parser.get_raw_line(), expected[0]);
+
+        parser.advance().unwrap();
+        assert_eq!(parser.get_raw_line(), expected[1]);
+
+        parser.reset();
+        assert_eq!(parser.get_raw_line(), "");
+        assert_eq!(*parser.get_command(), None);
+
+        parser.advance().unwrap();
+        assert_eq!(parser.get_raw_line(), expected[0]);
     }
 }

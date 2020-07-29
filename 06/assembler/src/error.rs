@@ -22,6 +22,11 @@ pub struct Error {
 }
 
 impl Error {
+    /// Creates a new assembler error from a known kind of error.
+    ///
+    /// Used to create errors which do not originate as a std::num::ParseIntError or from the
+    /// std::io library.
+    ///
     pub fn new(error_kind: ErrorKind) -> Error {
         Error { repr: Repr::Other(error_kind.as_str()) }
     }
@@ -34,15 +39,28 @@ enum Repr {
     Other(&'static str),
 }
 
+/// General categories of assembler error.
+///
 pub enum ErrorKind {
+    /// The parser has advanced through all lines of the input BufReader.
     EndOfFile,
-    InvalidSyntax,
+    /// The function call failed because it cannot take a Command of this type.
     InvalidCmdType,
-    MissingArguments,
-    MissingOutputFilename,
+    /// The provided input path contains a file extension that is not accepted.
     InvalidInFileExt,
+    /// The provided output path contains a file extension that is not accepted.
     InvalidOutFileExt,
+    /// A syntax error in the Hack assembly instruction has been identified.
+    InvalidSyntax,
+    /// An insufficient number of arguments were provided when generating a Config instance,
+    MissingArguments,
+    /// An output filename was not provided when generating a Config instance.
+    MissingOutputFilename,
+    /// An attempt to add a new variable to the SymbolTable has failed because there are no more
+    /// available RAM addresses.
     RAMFull,
+    /// An attempt to add a new variable or label to the SymbolTable has failed because it is
+    /// already present.
     SymbolExists,
 }
 
@@ -92,5 +110,19 @@ impl From<io::Error> for Error {
 impl From<ParseIntError> for Error {
     fn from(err: ParseIntError) -> Error {
         Error { repr: Repr::ParseInt(err) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_debug_error() {
+        let error = Error::new(ErrorKind::RAMFull);
+
+        let expected = "Error { repr: Other(\"there are no more free RAM addresses\") }";
+
+        assert_eq!(format!("{:?}", error), expected);
     }
 }

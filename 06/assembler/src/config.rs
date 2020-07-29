@@ -51,15 +51,10 @@ impl Config {
                 if re_hack_ext.is_match(&arg[..]) {
                     arg
                 } else {
-                    //arg + ".hack"
                     return Err(Error::new(ErrorKind::InvalidOutFileExt));
                 }
             }
-            None => {
-                return Err(Error::new(ErrorKind::MissingOutputFilename));
-//                re_asm_ext.replace(&infile[..], ".hack")
-//                    .into_owned()
-            },
+            None => return Err(Error::new(ErrorKind::MissingOutputFilename)),
         };
 
         Ok(Config { infile, outfile })
@@ -72,10 +67,12 @@ mod tests {
 
     #[test]
     fn check_valid_config() {
-        let arg_0 = String::from("ignore/the/path");
-        let arg_1 = String::from("test_input_file.asm");
-        let arg_2 = String::from("test_output_file.hack");
-        let mut args = vec![arg_0, arg_1, arg_2];
+        let mut args = vec![
+            String::from("ignore/the/path"),
+            String::from("test_input_file.asm"),
+            String::from("test_output_file.hack"),
+        ];
+
         let args = args.drain(..);
 
         assert_eq!(
@@ -86,17 +83,57 @@ mod tests {
             }
         );
     }
-//    #[test]
-//    fn check_invalid_infilename() {
-//        let arg_0 = String::from("ignore/the/path");
-//        let arg_1 = String::from("testfile.txt");
-//        let arg_2 = String::from("outfile.hack");
-//        let mut args = vec![arg_0, arg_1];
-//        let args = args.drain(..);
-//
-//        assert_eq!(
-//            Config::new(args),
-//            Error::new(ErrorKind::InvalidInFileExt)
-//        );
-//    }
+
+    #[test]
+    #[should_panic(expected = "invalid input file extension, only \\\'.asm\\\' accepted")]
+    fn check_invalid_infilename() {
+        let mut args = vec![
+            String::from("ignore/the/path"),
+            String::from("test_input_file.txt"),
+            String::from("test_output_file.hack"),
+        ];
+
+        let args = args.drain(..);
+
+        Config::new(args).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid output file extension, only \\\'.hack\\\' accepted")]
+    fn check_invalid_outfilename() {
+        let mut args = vec![
+            String::from("ignore/the/path"),
+            String::from("test_input_file.asm"),
+            String::from("test_output_file.txt"),
+        ];
+
+        let args = args.drain(..);
+
+        Config::new(args).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "input and output filenames were not provided")]
+    fn check_missing_args() {
+        let mut args = vec![
+            String::from("ignore/the/path"),
+        ];
+
+        let args = args.drain(..);
+
+        Config::new(args).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "output filename not provided")]
+    fn check_missing_outfilename() {
+        let mut args = vec![
+            String::from("ignore/the/path"),
+            String::from("test_input_file.asm"),
+        ];
+
+        let args = args.drain(..);
+
+        Config::new(args).unwrap();
+    }
 }

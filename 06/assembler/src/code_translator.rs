@@ -6,7 +6,7 @@ use crate::error::{Error, ErrorKind, Result};
 /// # Examples
 /// "
 /// '''
-/// assert_eq!(dest("AM").unwrap(), 0b101);
+/// assert_eq!(dest("AM").unwrap(), 0b0000000000000101);
 /// '''
 pub fn dest(mnemonic: &str) -> Result<u16> {
     match mnemonic {
@@ -28,7 +28,7 @@ pub fn dest(mnemonic: &str) -> Result<u16> {
 /// # Examples
 /// "
 /// '''
-/// assert_eq!(comp("D+A").unwrap(), 0b0000010);
+/// assert_eq!(comp("D+A").unwrap(), 0b0000000000000010);
 /// '''
 pub fn comp(mnemonic: &str) -> Result<u16> {
     match mnemonic {
